@@ -428,122 +428,237 @@ export default class ImportsController {
         password,
         database
       )) as any;
+      if (client === "mysql2") {
+        if (dbType === "mysql2") {
+          // Connect and Create database in our server
+          Database.manager.add(database, configMySql);
+          let dbConn = Database.connection(database);
+          await dbConn.rawQuery(`create database ${dbname}`);
+          // close create db connection
+          await Database.manager.close(database, true);
+          // end of connection
 
-      if (dbType === "mysql2") {
-        // Connect and Create database in our server
-        Database.manager.add(database, configMySql);
-        let dbConn = Database.connection(database);
-        await dbConn.rawQuery(`create database ${dbname}`);
-        // close create db connection
-        await Database.manager.close(database, true);
-        // end of connection
+          // connect to user database and pull data
+          Database.manager.add(client, dbConfig);
+          let dbConnCustome = Database.connection(client);
+          /* 
+              Get signle column each time
+              get data from  that column
+              create connection to our database and create tables and transfer
+              data in same time
+            */
+          let tables = await dbConnCustome.getAllTables();
 
-        // connect to user database and pull data
-        Database.manager.add(client, dbConfig);
-        let dbConnCustome = Database.connection(client);
-        /* 
-          Get signle column each time
-          get data from  that column
-          create connection to our database and create tables and transfer
-          data in same time
-        */
-        let tables = await dbConnCustome.getAllTables();
+          console.log("tables", tables);
 
-        console.log("tables", tables);
+          // export the database to raw sql file
+          exec(
+            `mysqldump -u${user} -p${password} -h${host}  ${database} > ${database}.sql`,
+            (err, stdout, stderr) => {
+              console.log(stdout);
 
-        // export the database to raw sql file
-        exec(
-          `mysqldump -u${user} -p${password} -h${host}  ${database} > ${database}.sql`,
-          (err, stdout, stderr) => {
-            console.log(stdout);
-
-            if (err) {
-              console.log(`exect error ${err}`);
-              return;
+              if (err) {
+                console.log(`exect error ${err}`);
+                return;
+              }
             }
-          }
-        );
+          );
 
-        // wait for 3 sec if we don't the data do not import to our data base
-        sleep.sleep(5);
-        // connect to our configuration server
-        let dbconn1 = await dbConnection(dbname, "mysql2");
-        // Import the database.mysqldump.exe
-        exec(
-          `mysql -u${dbconn1.connection.user} -p${dbconn1.connection.password} -h${dbconn1.connection.host} ${dbname} < ${database}.sql`,
-          (err, stdout, stderr) => {
-            if (err) {
-              console.error(`exec error: ${err}`);
-              return;
+          // wait for 3 sec if we don't the data do not import to our data base
+          sleep.sleep(5);
+          // connect to our configuration server
+          let dbconn1 = await dbConnection(dbname, "mysql2");
+          // Import the database.mysqldump.exe
+          exec(
+            `mysql -u${dbconn1.connection.user} -p${dbconn1.connection.password} -h${dbconn1.connection.host} ${dbname} < ${database}.sql`,
+            (err, stdout, stderr) => {
+              if (err) {
+                console.error(`exec error: ${err}`);
+                return;
+              }
+
+              console.log(`The import has finished.`);
             }
+          );
 
-            console.log(`The import has finished.`);
-          }
-        );
+          response.json({
+            status: "Success",
+            message: "Data transfered to our server",
+          });
+        } else if (dbType == "pg") {
+          // Connect and Create database in our server
+          Database.manager.add(database, configPg);
+          let dbConn = Database.connection(database);
+          await dbConn.rawQuery(`create database ${dbname}`);
 
-        response.json({
-          status: "Success",
-          message: "Data transfered to our server",
-        });
-      } else if (dbType == "pg") {
-        // Connect and Create database in our server
-        Database.manager.add(database, configPg);
-        let dbConn = Database.connection(database);
-        await dbConn.rawQuery(`create database ${dbname}`);
+          // close create db connection
+          await Database.manager.close(database, true);
+          // end of connection
 
-        // close create db connection
-        await Database.manager.close(database, true);
-        // end of connection
+          // connect to user database and pull data
+          Database.manager.add(client, dbConfig);
+          Database.connection(client);
+          /* 
+               Get signle column each time
+               get data from  that column
+               create connection to our database and create tables and transfer
+               data in same time
+             */
 
-        // connect to user database and pull data
-        Database.manager.add(client, dbConfig);
-        Database.connection(client);
-        /* 
-           Get signle column each time
-           get data from  that column
-           create connection to our database and create tables and transfer
-           data in same time
-         */
+          // export the database to raw sql file
+          exec(
+            `mysqldump -u${user} -p${password} -h${host}  ${database} > ${database}.sql`,
+            (err, stdout, stderr) => {
+              console.log(stdout);
 
-        // export the database to raw sql file
-        exec(
-          `pg_dump --username=${user}  --password --host=${host} --port=${port} --dbname=${database} > ${database}.sql`,
-          (err, stdout, stderr) => {
-            console.log(stdout);
-
-            if (err) {
-              console.log(`exect error ${err}`);
-              return;
+              if (err) {
+                console.log(`exect error ${err}`);
+                return;
+              }
             }
-          }
-        );
+          );
 
-        sleep.sleep(7);
+          // connect to our configuration server
+          let dbconn1 = await dbConnection(dbname, "pg");
 
-        console.log("here");
+          // wait for 3 sec if we don't the data do not import to our data base
+          sleep.sleep(10);
+          // Import the database.mysqldump.exe
+          exec(
+            `psql --username=${dbconn1.connection.user} --password --host=${dbconn1.connection.host} --port=${dbconn1.connection.port} --dbname=${dbname} < ${database}.sql  ${dbconn1.connection.password} \n`,
+            (err, stdout, stdin) => {
+              if (err) {
+                console.error(`exec error: ${err}`);
+                response.json({
+                  status: "failed",
+                  message: err,
+                });
+              }
 
-        // connect to our configuration server
-        let dbconn1 = await dbConnection(dbname, "pg");
-
-        // wait for 3 sec if we don't the data do not import to our data base
-        sleep.sleep(5);
-        // Import the database.mysqldump.exe
-        exec(
-          `psql --username=${dbconn1.connection.user} --password --host=${dbconn1.connection.host} --port=${dbconn1.connection.port} --dbname=${dbname} < ${database}.sql`,
-          (err, stdout, stderr) => {
-            if (err) {
-              console.error(`exec error: ${err}`);
-              return;
+              console.log(`The import has finished.`);
             }
+          );
 
-            console.log(`The import has finished.`);
-          }
-        );
+          response.json({
+            status: "Success",
+            message: "Data transfered to our server",
+          });
+        }
+      } else if (client === "pg") {
+        if (dbType === "mysql2") {
+          // Connect and Create database in our server
+          Database.manager.add(database, configMySql);
+          let dbConn = Database.connection(database);
+          await dbConn.rawQuery(`create database ${dbname}`);
+          // close create db connection
+          await Database.manager.close(database, true);
+          // end of connection
 
-        response.json({
-          status: "Success",
-          message: "Data transfered to our server",
-        });
+          // connect to user database and pull data
+          Database.manager.add(client, dbConfig);
+          Database.connection(client);
+          /* 
+             Get signle column each time
+             get data from  that column
+             create connection to our database and create tables and transfer
+             data in same time
+           */
+
+          // export the database to raw sql file
+          exec(
+            `pg_dump --username=${user}  --password --host=${host} --port=${port} --dbname=${database} > ${database}.sql`,
+            (err, stdout, stderr) => {
+              if (err) {
+                console.log(`exect error ${err}`);
+                response.json({
+                  status: "failed",
+                  message: err,
+                });
+              }
+            }
+          );
+
+          // wait for 3 sec if we don't the data do not import to our data base
+          sleep.sleep(5);
+          // connect to our configuration server
+          let dbconn1 = await dbConnection(dbname, "mysql2");
+          // Import the database.mysqldump.exe
+          exec(
+            `mysql -u${dbconn1.connection.user} -p${dbconn1.connection.password} -h${dbconn1.connection.host} ${dbname} < ${database}.sql`,
+            (err, stdout, stderr) => {
+              if (err) {
+                console.error(`exec error: ${err}`);
+                return;
+              }
+
+              console.log(`The import has finished.`);
+            }
+          );
+
+          response.json({
+            status: "Success",
+            message: "Data transfered to our server",
+          });
+        } else if (dbType == "pg") {
+          // Connect and Create database in our server
+          Database.manager.add(database, configPg);
+          let dbConn = Database.connection(database);
+          await dbConn.rawQuery(`create database ${dbname}`);
+
+          // close create db connection
+          await Database.manager.close(database, true);
+          // end of connection
+
+          // connect to user database and pull data
+          Database.manager.add(client, dbConfig);
+          Database.connection(client);
+          /* 
+             Get signle column each time
+             get data from  that column
+             create connection to our database and create tables and transfer
+             data in same time
+           */
+
+          // export the database to raw sql file
+          exec(
+            `pg_dump --username=${user}  --password --host=${host} --port=${port} --dbname=${database} > ${database}.sql`,
+            (err, stdout, stderr) => {
+              if (err) {
+                console.log(`exect error ${err}`);
+                response.json({
+                  status: "failed",
+                  message: err,
+                });
+              }
+            }
+          );
+
+          // connect to our configuration server
+          let dbconn1 = await dbConnection(dbname, "pg");
+
+          // wait for 3 sec if we don't the data do not import to our data base
+          sleep.sleep(10);
+          // Import the database.mysqldump.exe
+          exec(
+            `psql --username=${dbconn1.connection.user} --password --host=${dbconn1.connection.host} --port=${dbconn1.connection.port} --dbname=${dbname} < ${database}.sql  ${dbconn1.connection.password} \n`,
+            (err, stdout, stdin) => {
+              if (err) {
+                console.error(`exec error: ${err}`);
+                response.json({
+                  status: "failed",
+                  message: err,
+                });
+              }
+
+              console.log(`The import has finished.`);
+            }
+          );
+
+          response.json({
+            status: "Success",
+            message: "Data transfered to our server",
+          });
+        }
       }
     } else {
       response.json({
