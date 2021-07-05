@@ -316,7 +316,8 @@ export default class ImportsController {
       let errorTables: String[] = [];
       let existTable;
       for (let i = 0; i < dbTable.length; i++) {
-        existTable = tables.find((t) => t === dbTable[i]);
+        existTable = tables.find((t) => t === dbTable[i].trim());
+
         if (!existTable) {
           errorTables.push(dbTable[i]);
         }
@@ -342,24 +343,31 @@ export default class ImportsController {
                   data: query,
                 });
               }
-            } else if (command[1] === "join") {
-              query = await conn
-                .from(dbTable[0])
-                .join(
-                  `${dbTable[1]}`,
-                  `${dbTable[0]}.user_id`,
-                  `${dbTable[1]}.id`
-                )
-                .select("*");
+            } else if (tables.length > 1) {
+              if (command[1] === "join") {
+                query = await conn
+                  .from(dbTable[0])
+                  .join(
+                    `${dbTable[1]}`,
+                    `${dbTable[0]}.user_id`,
+                    `${dbTable[1]}.id`
+                  )
+                  .select("*");
 
-              // query = await conn
-              // .from("user")
-              // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
-              // .select("*");
+                // query = await conn
+                // .from("user")
+                // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
+                // .select("*");
 
+                response.json({
+                  status: "success",
+                  data: query,
+                });
+              }
+            } else {
               response.json({
-                status: "success",
-                data: query,
+                status: "Failed",
+                message: "You can't join any database you have only one table",
               });
             }
           }
@@ -372,7 +380,7 @@ export default class ImportsController {
       } else {
         response.json({
           status: "Failed",
-          message: `This tables doesn't exist: ${errorTables}`,
+          message: `This tables doesn't exist: ${errorTables}Your tables are: ${tables}`,
         });
       }
     } else if (dbConfig === "mysql2") {
@@ -389,7 +397,7 @@ export default class ImportsController {
       let errorTables: String[] = [];
       let existTable;
       for (let i = 0; i < dbTable.length; i++) {
-        existTable = tables.find((t) => t === dbTable[i]);
+        existTable = tables.find((t) => t === dbTable[i].trim());
         if (!existTable) {
           errorTables.push(dbTable[i]);
         }
@@ -415,24 +423,31 @@ export default class ImportsController {
                   data: query,
                 });
               }
-            } else if (command[1] === "join") {
-              query = await conn
-                .from(dbTable[0])
-                .join(
-                  `${dbTable[1]}`,
-                  `${dbTable[0]}.user_id`,
-                  `${dbTable[1]}.id`
-                )
-                .select("*");
+            } else if (tables.length > 1) {
+              if (command[1] === "join") {
+                query = await conn
+                  .from(dbTable[0])
+                  .join(
+                    `${dbTable[1]}`,
+                    `${dbTable[0]}.user_id`,
+                    `${dbTable[1]}.id`
+                  )
+                  .select("*");
 
-              // query = await conn
-              // .from("user")
-              // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
-              // .select("*");
+                // query = await conn
+                // .from("user")
+                // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
+                // .select("*");
 
+                response.json({
+                  status: "success",
+                  data: query,
+                });
+              }
+            } else {
               response.json({
-                status: "success",
-                data: query,
+                status: "Failed",
+                message: "You can't join any database you have only one table",
               });
             }
           }
@@ -445,7 +460,7 @@ export default class ImportsController {
       } else {
         response.json({
           status: "Failed",
-          message: `This tables doesn't exist: ${errorTables}`,
+          message: `This tables doesn't exist: ${errorTables}Your tables are: ${tables}`,
         });
       }
     }
