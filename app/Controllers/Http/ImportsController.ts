@@ -361,28 +361,35 @@ export default class ImportsController {
                         });
                       })
                       .select("*");
-                  } else if (field.length > 1) {
-                    query = await conn
-                      .from(dbTable[0])
-                      .join(`${dbTable[1]}`, (query) => {
-                        query.on((subQuery) => {
-                          subQuery.on(
-                            `${dbTable[0]}.${join_fields[0].trim()}`,
-                            `${dbTable[1]}.${join_fields[1].trim()}`
-                          );
-                        });
-                      })
-                      .select(field[0].trim())
-                      .select(field[1]?.trim());
-                  } else if (field.length == 1) {
-                    query = await conn
-                      .from(dbTable[0])
-                      .join(
-                        `${dbTable[1]}`,
-                        `${dbTable[0]}.${join_fields[0].trim()}`,
-                        `${dbTable[1]}.${join_fields[1].trim()}`
-                      )
-                      .select(field[0].trim());
+                  } else if (field.length > 0) {
+                    query = await conn.from(dbTable[0]).if(
+                      field.length == 1,
+                      (query) => {
+                        query
+                          .join(`${dbTable[1]}`, (query) => {
+                            query.on((subQuery) => {
+                              subQuery.on(
+                                `${dbTable[0]}.${join_fields[0].trim()}`,
+                                `${dbTable[1]}.${join_fields[1].trim()}`
+                              );
+                            });
+                          })
+                          .select(field[0].trim());
+                      },
+                      (query) => {
+                        query
+                          .join(`${dbTable[1]}`, (query) => {
+                            query.on((subQuery) => {
+                              subQuery.on(
+                                `${dbTable[0]}.${join_fields[0].trim()}`,
+                                `${dbTable[1]}.${join_fields[1].trim()}`
+                              );
+                            });
+                          })
+                          .select(field[0].trim())
+                          .select(field[1]?.trim());
+                      }
+                    );
                   }
 
                   // query = await conn
@@ -449,7 +456,9 @@ export default class ImportsController {
                   data: query,
                 });
               } else {
-                query = await conn.from(dbTable[0]).select(field[0].trim());
+                query = await conn
+                  .from(dbTable[0])
+                  .select(field[0].trim(), field[1]);
                 response.json({
                   status: "success",
                   data: query,
@@ -482,8 +491,7 @@ export default class ImportsController {
                         );
                       });
                     })
-                    .select(field[0].trim())
-                    .select(field[1]?.trim());
+                    .select(field[0].trim(), field[1]?.trim());
                 } else if (field.length == 1) {
                   query = await conn
                     .from(dbTable[0])
