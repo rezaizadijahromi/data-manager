@@ -303,6 +303,7 @@ export default class ImportsController {
 
     // We choose db config between pg or mysql2
     // get the database and table and run some questy base on user request
+
     if (dbConfig === "pg") {
       // register a connection
       let dbConn = (await dbConnection(dbName, dbConfig)) as any;
@@ -310,14 +311,24 @@ export default class ImportsController {
       let conn = Database.connection(dbName);
 
       /* 
-        Check if given tables exist in our database or not
-        if tables doesn't exist we give user an Error
+      Check if given tables exist in our database or not
+      if tables doesn't exist we give user an Error
       */
-      let tables = await conn.getAllTables();
+      // let tables = await conn.getAllTables();
+      let storeTables = await conn.rawQuery(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+      );
+
+      let tables: String[] = [];
+      for (let i = 0; i < storeTables["rows"].length; i++) {
+        tables.push(storeTables["rows"][i]["table_name"]);
+      }
+
       let errorTables: String[] = [];
       let existTable;
       for (let i = 0; i < dbTable.length; i++) {
         existTable = tables.find((t) => t === dbTable[i].trim());
+        console.log(existTable);
 
         if (!existTable) {
           errorTables.push(dbTable[i]);
@@ -346,8 +357,6 @@ export default class ImportsController {
               }
             } else if (tables.length > 1) {
               if (command[1] === "join") {
-                console.log(field);
-
                 if (command[1] === "join") {
                   if (!field) {
                     query = await conn
@@ -443,6 +452,8 @@ export default class ImportsController {
       }
 
       if (errorTables.length == 0) {
+        console.log(field);
+
         if (dbTable) {
           /* field was empty query from all tables 
             otherwise return with given columns
@@ -456,9 +467,7 @@ export default class ImportsController {
                   data: query,
                 });
               } else {
-                query = await conn
-                  .from(dbTable[0])
-                  .select(field[0].trim(), field[1]);
+                query = await conn.from(dbTable[0]).select(field[0].trim());
                 response.json({
                   status: "success",
                   data: query,
