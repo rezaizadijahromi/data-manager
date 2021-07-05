@@ -295,10 +295,11 @@ export default class ImportsController {
   async getTablesInfo({ request, response }: HttpContextContract) {
     const { dbName, dbConfig } = request.only(["dbName", "dbConfig"]) as any;
 
-    let dbTable: String = request.input("dbTable").split(",");
-    let command = request.input("cmd").split(" ");
-    let field = request.input("field");
+    let dbTable: String = request.input("dbTable")?.split(",");
+    let command = request.input("cmd")?.split(" ");
+    let field = request.input("field")?.split(",");
     let query;
+    let join_fields = request.input("join_fields")?.split(",");
 
     // We choose db config between pg or mysql2
     // get the database and table and run some questy base on user request
@@ -337,7 +338,7 @@ export default class ImportsController {
                   data: query,
                 });
               } else {
-                query = await conn.from(dbTable[0]).select(field);
+                query = await conn.from(dbTable[0]).select(field[0].trim());
                 response.json({
                   status: "success",
                   data: query,
@@ -345,24 +346,55 @@ export default class ImportsController {
               }
             } else if (tables.length > 1) {
               if (command[1] === "join") {
-                query = await conn
-                  .from(dbTable[0])
-                  .join(
-                    `${dbTable[1]}`,
-                    `${dbTable[0]}.user_id`,
-                    `${dbTable[1]}.id`
-                  )
-                  .select("*");
+                console.log(field);
 
-                // query = await conn
-                // .from("user")
-                // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
-                // .select("*");
+                if (command[1] === "join") {
+                  if (!field) {
+                    query = await conn
+                      .from(dbTable[0])
+                      .join(`${dbTable[1]}`, (query) => {
+                        query.on((subQuery) => {
+                          subQuery.on(
+                            `${dbTable[0]}.${join_fields[0].trim()}`,
+                            `${dbTable[1]}.${join_fields[1].trim()}`
+                          );
+                        });
+                      })
+                      .select("*");
+                  } else if (field.length > 1) {
+                    query = await conn
+                      .from(dbTable[0])
+                      .join(`${dbTable[1]}`, (query) => {
+                        query.on((subQuery) => {
+                          subQuery.on(
+                            `${dbTable[0]}.${join_fields[0].trim()}`,
+                            `${dbTable[1]}.${join_fields[1].trim()}`
+                          );
+                        });
+                      })
+                      .select(field[0].trim())
+                      .select(field[1]?.trim());
+                  } else if (field.length == 1) {
+                    query = await conn
+                      .from(dbTable[0])
+                      .join(
+                        `${dbTable[1]}`,
+                        `${dbTable[0]}.${join_fields[0].trim()}`,
+                        `${dbTable[1]}.${join_fields[1].trim()}`
+                      )
+                      .select(field[0].trim());
+                  }
 
-                response.json({
-                  status: "success",
-                  data: query,
-                });
+                  // query = await conn
+                  // .from("user")
+                  // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
+                  // .select("*");
+
+                  response.json({
+                    status: "success",
+                    data: query,
+                  });
+                }
               }
             } else {
               response.json({
@@ -417,22 +449,51 @@ export default class ImportsController {
                   data: query,
                 });
               } else {
-                query = await conn.from(dbTable[0]).select(field);
+                query = await conn.from(dbTable[0]).select(field[0].trim());
                 response.json({
                   status: "success",
                   data: query,
                 });
               }
             } else if (tables.length > 1) {
+              console.log(field);
+
               if (command[1] === "join") {
-                query = await conn
-                  .from(dbTable[0])
-                  .join(
-                    `${dbTable[1]}`,
-                    `${dbTable[0]}.user_id`,
-                    `${dbTable[1]}.id`
-                  )
-                  .select("*");
+                if (!field) {
+                  query = await conn
+                    .from(dbTable[0])
+                    .join(`${dbTable[1]}`, (query) => {
+                      query.on((subQuery) => {
+                        subQuery.on(
+                          `${dbTable[0]}.${join_fields[0].trim()}`,
+                          `${dbTable[1]}.${join_fields[1].trim()}`
+                        );
+                      });
+                    })
+                    .select("*");
+                } else if (field.length > 1) {
+                  query = await conn
+                    .from(dbTable[0])
+                    .join(`${dbTable[1]}`, (query) => {
+                      query.on((subQuery) => {
+                        subQuery.on(
+                          `${dbTable[0]}.${join_fields[0].trim()}`,
+                          `${dbTable[1]}.${join_fields[1].trim()}`
+                        );
+                      });
+                    })
+                    .select(field[0].trim())
+                    .select(field[1]?.trim());
+                } else if (field.length == 1) {
+                  query = await conn
+                    .from(dbTable[0])
+                    .join(
+                      `${dbTable[1]}`,
+                      `${dbTable[0]}.${join_fields[0].trim()}`,
+                      `${dbTable[1]}.${join_fields[1].trim()}`
+                    )
+                    .select(field[0].trim());
+                }
 
                 // query = await conn
                 // .from("user")
