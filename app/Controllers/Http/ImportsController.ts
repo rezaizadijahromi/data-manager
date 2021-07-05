@@ -12,6 +12,7 @@ import Database from "@ioc:Adonis/Lucid/Database";
 import { configMySql, configPg, connectTo, dbConnection } from "./configDb";
 
 import sleep from "sleep";
+import { table } from "console";
 
 export default class ImportsController {
   async import({ request, response }: HttpContextContract) {
@@ -292,17 +293,12 @@ export default class ImportsController {
   }
 
   async getTablesInfo({ request, response }: HttpContextContract) {
-    const { dbName, dbTable, dbConfig } = request.only([
-      "dbName",
-      "dbTable",
-      "dbConfig",
-    ]) as any;
+    const { dbName, dbConfig } = request.only(["dbName", "dbConfig"]) as any;
 
+    let dbTable: String = request.input("dbTable").split(",");
     let command = request.input("cmd").split(" ");
     let field = request.input("field");
     let query;
-
-    console.log(command[0]);
 
     // We choose db config between pg or mysql2
     // get the database and table and run some questy base on user request
@@ -312,46 +308,71 @@ export default class ImportsController {
       Database.manager.add(dbName, dbConn);
       let conn = Database.connection(dbName);
 
-      if (dbTable) {
-        /* field was empty query from all tables 
-          otherwise return with given columns
-        */
-        if (command[0] === "select") {
-          if (!command[1]) {
-            if (!field) {
-              query = await conn.from(dbTable).select("*");
-              response.json({
-                status: "Success",
-                data: query,
-              });
-            } else {
-              query = await conn.from(dbTable).select(field);
+      /* 
+        Check if given tables exist in our database or not
+        if tables doesn't exist we give user an Error
+      */
+      let tables = await conn.getAllTables();
+      let errorTables: String[] = [];
+      let existTable;
+      for (let i = 0; i < dbTable.length; i++) {
+        existTable = tables.find((t) => t === dbTable[i]);
+        if (!existTable) {
+          errorTables.push(dbTable[i]);
+        }
+      }
+
+      if (errorTables.length == 0) {
+        if (dbTable) {
+          /* field was empty query from all tables 
+            otherwise return with given columns
+          */
+          if (command[0] === "select") {
+            if (!command[1]) {
+              if (!field) {
+                query = await conn.from(dbTable[0]).select("*");
+                response.json({
+                  status: "Success",
+                  data: query,
+                });
+              } else {
+                query = await conn.from(dbTable[0]).select(field);
+                response.json({
+                  status: "success",
+                  data: query,
+                });
+              }
+            } else if (command[1] === "join") {
+              query = await conn
+                .from(dbTable[0])
+                .join(
+                  `${dbTable[1]}`,
+                  `${dbTable[0]}.user_id`,
+                  `${dbTable[1]}.id`
+                )
+                .select("*");
+
+              // query = await conn
+              // .from("user")
+              // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
+              // .select("*");
+
               response.json({
                 status: "success",
                 data: query,
               });
             }
-          } else if (command[1] === "join") {
-            query = await conn
-              .from(dbTable)
-              .join("user", `${dbTable}.id`, "=", "user.id")
-              .select("*");
-
-            // query = await conn
-            // .from("user")
-            // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
-            // .select("*");
-
-            response.json({
-              status: "success",
-              data: query,
-            });
           }
+        } else {
+          response.json({
+            status: "Failed",
+            message: "No table given",
+          });
         }
       } else {
         response.json({
           status: "Failed",
-          message: "No table given",
+          message: `This tables doesn't exist: ${errorTables}`,
         });
       }
     } else if (dbConfig === "mysql2") {
@@ -360,46 +381,71 @@ export default class ImportsController {
       Database.manager.add(dbName, dbConn);
       let conn = Database.connection(dbName);
 
-      if (dbTable) {
-        /* field was empty query from all tables 
-          otherwise return with given columns
-        */
-        if (command[0] === "select") {
-          if (!command[1]) {
-            if (!field) {
-              query = await conn.from(dbTable).select("*");
-              response.json({
-                status: "Success",
-                data: query,
-              });
-            } else {
-              query = await conn.from(dbTable).select(field);
+      /* 
+        Check if given tables exist in our database or not
+        if tables doesn't exist we give user an Error
+      */
+      let tables = await conn.getAllTables();
+      let errorTables: String[] = [];
+      let existTable;
+      for (let i = 0; i < dbTable.length; i++) {
+        existTable = tables.find((t) => t === dbTable[i]);
+        if (!existTable) {
+          errorTables.push(dbTable[i]);
+        }
+      }
+
+      if (errorTables.length == 0) {
+        if (dbTable) {
+          /* field was empty query from all tables 
+            otherwise return with given columns
+          */
+          if (command[0] === "select") {
+            if (!command[1]) {
+              if (!field) {
+                query = await conn.from(dbTable[0]).select("*");
+                response.json({
+                  status: "Success",
+                  data: query,
+                });
+              } else {
+                query = await conn.from(dbTable[0]).select(field);
+                response.json({
+                  status: "success",
+                  data: query,
+                });
+              }
+            } else if (command[1] === "join") {
+              query = await conn
+                .from(dbTable[0])
+                .join(
+                  `${dbTable[1]}`,
+                  `${dbTable[0]}.user_id`,
+                  `${dbTable[1]}.id`
+                )
+                .select("*");
+
+              // query = await conn
+              // .from("user")
+              // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
+              // .select("*");
+
               response.json({
                 status: "success",
                 data: query,
               });
             }
-          } else if (command[1] === "join") {
-            query = await conn
-              .from(dbTable)
-              .join("user", `${dbTable}.user_id`, "user.id")
-              .select("*");
-
-            // query = await conn
-            // .from("user")
-            // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
-            // .select("*");
-
-            response.json({
-              status: "success",
-              data: query,
-            });
           }
+        } else {
+          response.json({
+            status: "Failed",
+            message: "No table given",
+          });
         }
       } else {
         response.json({
           status: "Failed",
-          message: "No table given",
+          message: `This tables doesn't exist: ${errorTables}`,
         });
       }
     }
@@ -487,36 +533,30 @@ export default class ImportsController {
           });
         } else if (dbType == "pg") {
           // Connect and Create database in our server
-          Database.manager.add(database, configPg);
-          let dbConn = Database.connection(database);
-          await dbConn.rawQuery(`create database ${dbname}`);
+          // Database.manager.add(database, configPg);
+          // let dbConn = Database.connection(database);
+          // await dbConn.rawQuery(`create database ${dbname}`);
 
-          // close create db connection
-          await Database.manager.close(database, true);
-          // end of connection
+          // // close create db connection
+          // await Database.manager.close(database, true);
+          // // end of connection
 
-          // connect to user database and pull data
-          Database.manager.add(client, dbConfig);
-          Database.connection(client);
-          /* 
-               Get signle column each time
-               get data from  that column
-               create connection to our database and create tables and transfer
-               data in same time
-             */
+          // // connect to user database and pull data
+          // Database.manager.add(client, dbConfig);
+          // Database.connection(client);
 
-          // export the database to raw sql file
-          exec(
-            `mysqldump -u${user} -p${password} -h${host}  ${database} > ${database}.sql`,
-            (err, stdout, stderr) => {
-              console.log(stdout);
+          // // export the database to raw sql file
+          // exec(
+          //   `mysqldump -u${user} -p${password} -h${host}  ${database} > ${database}.sql`,
+          //   (err, stdout, stderr) => {
+          //     console.log(stdout);
 
-              if (err) {
-                console.log(`exect error ${err}`);
-                return;
-              }
-            }
-          );
+          //     if (err) {
+          //       console.log(`exect error ${err}`);
+          //       return;
+          //     }
+          //   }
+          // );
 
           // connect to our configuration server
           let dbconn1 = await dbConnection(dbname, "pg");
@@ -543,6 +583,8 @@ export default class ImportsController {
             status: "Success",
             message: "Data transfered to our server",
           });
+
+          await Database.manager.close(client, true);
         }
       } else if (client === "pg") {
         if (dbType === "mysql2") {
