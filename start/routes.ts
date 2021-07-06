@@ -34,3 +34,4 @@ Route.get("connect-pg/", "ImportsController.connectToPg");
 Route.post("create-database/", "ImportsController.createDatabaseUser");
 Route.post("get-table/", "ImportsController.getTablesInfo");
 Route.post("connect-to/", "ImportsController.connectToCustomerDb");
+Route.post("scheduler/", "ImportsController.TestScheduler");

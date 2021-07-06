@@ -12,7 +12,7 @@ import Database from "@ioc:Adonis/Lucid/Database";
 import { configMySql, configPg, connectTo, dbConnection } from "./configDb";
 
 import sleep from "sleep";
-import { table } from "console";
+import cron from "node-cron";
 
 export default class ImportsController {
   async import({ request, response }: HttpContextContract) {
@@ -304,59 +304,185 @@ export default class ImportsController {
     // We choose db config between pg or mysql2
     // get the database and table and run some questy base on user request
 
-    if (dbConfig === "pg") {
-      // register a connection
-      let dbConn = (await dbConnection(dbName, dbConfig)) as any;
-      Database.manager.add(dbName, dbConn);
-      let conn = Database.connection(dbName);
+    cron.schedule("0 */2 * * * *", async () => {
+      if (dbConfig === "pg") {
+        // register a connection
+        let dbConn = (await dbConnection(dbName, dbConfig)) as any;
+        Database.manager.add(dbName, dbConn);
+        let conn = Database.connection(dbName);
 
-      /* 
-      Check if given tables exist in our database or not
-      if tables doesn't exist we give user an Error
-      */
-      // let tables = await conn.getAllTables();
-      let storeTables = await conn.rawQuery(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
-      );
+        /* 
+        Check if given tables exist in our database or not
+        if tables doesn't exist we give user an Error
+        */
+        // let tables = await conn.getAllTables();
+        let storeTables = await conn.rawQuery(
+          "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+        );
 
-      let tables: String[] = [];
-      for (let i = 0; i < storeTables["rows"].length; i++) {
-        tables.push(storeTables["rows"][i]["table_name"]);
-      }
-
-      let errorTables: String[] = [];
-      let existTable;
-      for (let i = 0; i < dbTable.length; i++) {
-        existTable = tables.find((t) => t === dbTable[i].trim());
-        console.log(existTable);
-
-        if (!existTable) {
-          errorTables.push(dbTable[i]);
+        let tables: String[] = [];
+        for (let i = 0; i < storeTables["rows"].length; i++) {
+          tables.push(storeTables["rows"][i]["table_name"]);
         }
-      }
 
-      if (errorTables.length == 0) {
-        if (dbTable) {
-          /* field was empty query from all tables 
-            otherwise return with given columns
-          */
-          if (command[0] === "select") {
-            if (!command[1]) {
-              if (!field) {
-                query = await conn.from(dbTable[0]).select("*");
-                response.json({
-                  status: "Success",
-                  data: query,
-                });
+        let errorTables: String[] = [];
+        let existTable;
+        for (let i = 0; i < dbTable.length; i++) {
+          existTable = tables.find((t) => t === dbTable[i].trim());
+          console.log(existTable);
+
+          if (!existTable) {
+            errorTables.push(dbTable[i]);
+          }
+        }
+
+        if (errorTables.length == 0) {
+          if (dbTable) {
+            /* field was empty query from all tables 
+              otherwise return with given columns
+            */
+            if (command[0] === "select") {
+              if (!command[1]) {
+                if (!field) {
+                  query = await conn.from(dbTable[0]).select("*");
+                  response.json({
+                    status: "Success",
+                    data: query,
+                  });
+                } else {
+                  query = await conn.from(dbTable[0]).select(field[0].trim());
+                  response.json({
+                    status: "success",
+                    data: query,
+                  });
+                }
+              } else if (tables.length > 1) {
+                if (command[1] === "join") {
+                  if (command[1] === "join") {
+                    if (!field) {
+                      query = await conn
+                        .from(dbTable[0])
+                        .join(`${dbTable[1]}`, (query) => {
+                          query.on((subQuery) => {
+                            subQuery.on(
+                              `${dbTable[0]}.${join_fields[0].trim()}`,
+                              `${dbTable[1]}.${join_fields[1].trim()}`
+                            );
+                          });
+                        })
+                        .select("*");
+
+                      console.log(query);
+                    } else if (field.length > 0) {
+                      query = await conn.from(dbTable[0]).if(
+                        field.length == 1,
+                        (query) => {
+                          query
+                            .join(`${dbTable[1]}`, (query) => {
+                              query.on((subQuery) => {
+                                subQuery.on(
+                                  `${dbTable[0]}.${join_fields[0].trim()}`,
+                                  `${dbTable[1]}.${join_fields[1].trim()}`
+                                );
+                              });
+                            })
+                            .select(field[0].trim());
+                        },
+                        (query) => {
+                          query
+                            .join(`${dbTable[1]}`, (query) => {
+                              query.on((subQuery) => {
+                                subQuery.on(
+                                  `${dbTable[0]}.${join_fields[0].trim()}`,
+                                  `${dbTable[1]}.${join_fields[1].trim()}`
+                                );
+                              });
+                            })
+                            .select(field[0].trim())
+                            .select(field[1]?.trim());
+                        }
+                      );
+                      console.log(query);
+                    }
+
+                    // query = await conn
+                    // .from("user")
+                    // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
+                    // .select("*");
+
+                    response.json({
+                      status: "success",
+                      data: query,
+                    });
+                  }
+                }
               } else {
-                query = await conn.from(dbTable[0]).select(field[0].trim());
                 response.json({
-                  status: "success",
-                  data: query,
+                  status: "Failed",
+                  message:
+                    "You can't join any database you have only one table",
                 });
               }
-            } else if (tables.length > 1) {
-              if (command[1] === "join") {
+            }
+          } else {
+            response.json({
+              status: "Failed",
+              message: "No table given",
+            });
+          }
+        } else {
+          response.json({
+            status: "Failed",
+            message: `This tables doesn't exist: ${errorTables}Your tables are: ${tables}`,
+          });
+        }
+      } else if (dbConfig === "mysql2") {
+        // register a connection
+        let dbConn = (await dbConnection(dbName, dbConfig)) as any;
+        Database.manager.add(dbName, dbConn);
+        let conn = Database.connection(dbName);
+
+        /* 
+          Check if given tables exist in our database or not
+          if tables doesn't exist we give user an Error
+        */
+        let tables = await conn.getAllTables();
+        let errorTables: String[] = [];
+        let existTable;
+        for (let i = 0; i < dbTable.length; i++) {
+          existTable = tables.find((t) => t === dbTable[i].trim());
+          if (!existTable) {
+            errorTables.push(dbTable[i]);
+          }
+        }
+
+        if (errorTables.length == 0) {
+          console.log(field);
+
+          if (dbTable) {
+            /* field was empty query from all tables 
+              otherwise return with given columns
+            */
+            if (command[0] === "select") {
+              if (!command[1]) {
+                if (!field) {
+                  query = await conn.from(dbTable[0]).select("*");
+                  response.json({
+                    status: "Success",
+                    data: query,
+                  });
+
+                  console.log(query);
+                } else {
+                  query = await conn.from(dbTable[0]).select(field[0].trim());
+                  response.json({
+                    status: "success",
+                    data: query,
+                  });
+                }
+              } else if (tables.length > 1) {
+                console.log(field);
+
                 if (command[1] === "join") {
                   if (!field) {
                     query = await conn
@@ -370,36 +496,30 @@ export default class ImportsController {
                         });
                       })
                       .select("*");
-                  } else if (field.length > 0) {
-                    query = await conn.from(dbTable[0]).if(
-                      field.length == 1,
-                      (query) => {
-                        query
-                          .join(`${dbTable[1]}`, (query) => {
-                            query.on((subQuery) => {
-                              subQuery.on(
-                                `${dbTable[0]}.${join_fields[0].trim()}`,
-                                `${dbTable[1]}.${join_fields[1].trim()}`
-                              );
-                            });
-                          })
-                          .select(field[0].trim());
-                      },
-                      (query) => {
-                        query
-                          .join(`${dbTable[1]}`, (query) => {
-                            query.on((subQuery) => {
-                              subQuery.on(
-                                `${dbTable[0]}.${join_fields[0].trim()}`,
-                                `${dbTable[1]}.${join_fields[1].trim()}`
-                              );
-                            });
-                          })
-                          .select(field[0].trim())
-                          .select(field[1]?.trim());
-                      }
-                    );
+                  } else if (field.length > 1) {
+                    query = await conn
+                      .from(dbTable[0])
+                      .join(`${dbTable[1]}`, (query) => {
+                        query.on((subQuery) => {
+                          subQuery.on(
+                            `${dbTable[0]}.${join_fields[0].trim()}`,
+                            `${dbTable[1]}.${join_fields[1].trim()}`
+                          );
+                        });
+                      })
+                      .select(field[0].trim(), field[1]?.trim());
+                  } else if (field.length == 1) {
+                    query = await conn
+                      .from(dbTable[0])
+                      .join(
+                        `${dbTable[1]}`,
+                        `${dbTable[0]}.${join_fields[0].trim()}`,
+                        `${dbTable[1]}.${join_fields[1].trim()}`
+                      )
+                      .select(field[0].trim());
                   }
+
+                  console.log(query);
 
                   // query = await conn
                   // .from("user")
@@ -411,137 +531,30 @@ export default class ImportsController {
                     data: query,
                   });
                 }
-              }
-            } else {
-              response.json({
-                status: "Failed",
-                message: "You can't join any database you have only one table",
-              });
-            }
-          }
-        } else {
-          response.json({
-            status: "Failed",
-            message: "No table given",
-          });
-        }
-      } else {
-        response.json({
-          status: "Failed",
-          message: `This tables doesn't exist: ${errorTables}Your tables are: ${tables}`,
-        });
-      }
-    } else if (dbConfig === "mysql2") {
-      // register a connection
-      let dbConn = (await dbConnection(dbName, dbConfig)) as any;
-      Database.manager.add(dbName, dbConn);
-      let conn = Database.connection(dbName);
-
-      /* 
-        Check if given tables exist in our database or not
-        if tables doesn't exist we give user an Error
-      */
-      let tables = await conn.getAllTables();
-      let errorTables: String[] = [];
-      let existTable;
-      for (let i = 0; i < dbTable.length; i++) {
-        existTable = tables.find((t) => t === dbTable[i].trim());
-        if (!existTable) {
-          errorTables.push(dbTable[i]);
-        }
-      }
-
-      if (errorTables.length == 0) {
-        console.log(field);
-
-        if (dbTable) {
-          /* field was empty query from all tables 
-            otherwise return with given columns
-          */
-          if (command[0] === "select") {
-            if (!command[1]) {
-              if (!field) {
-                query = await conn.from(dbTable[0]).select("*");
-                response.json({
-                  status: "Success",
-                  data: query,
-                });
               } else {
-                query = await conn.from(dbTable[0]).select(field[0].trim());
                 response.json({
-                  status: "success",
-                  data: query,
+                  status: "Failed",
+                  message:
+                    "You can't join any database you have only one table",
                 });
               }
-            } else if (tables.length > 1) {
-              console.log(field);
-
-              if (command[1] === "join") {
-                if (!field) {
-                  query = await conn
-                    .from(dbTable[0])
-                    .join(`${dbTable[1]}`, (query) => {
-                      query.on((subQuery) => {
-                        subQuery.on(
-                          `${dbTable[0]}.${join_fields[0].trim()}`,
-                          `${dbTable[1]}.${join_fields[1].trim()}`
-                        );
-                      });
-                    })
-                    .select("*");
-                } else if (field.length > 1) {
-                  query = await conn
-                    .from(dbTable[0])
-                    .join(`${dbTable[1]}`, (query) => {
-                      query.on((subQuery) => {
-                        subQuery.on(
-                          `${dbTable[0]}.${join_fields[0].trim()}`,
-                          `${dbTable[1]}.${join_fields[1].trim()}`
-                        );
-                      });
-                    })
-                    .select(field[0].trim(), field[1]?.trim());
-                } else if (field.length == 1) {
-                  query = await conn
-                    .from(dbTable[0])
-                    .join(
-                      `${dbTable[1]}`,
-                      `${dbTable[0]}.${join_fields[0].trim()}`,
-                      `${dbTable[1]}.${join_fields[1].trim()}`
-                    )
-                    .select(field[0].trim());
-                }
-
-                // query = await conn
-                // .from("user")
-                // .join(dbTable, `user.id`, "=", `${dbTable}.id`)
-                // .select("*");
-
-                response.json({
-                  status: "success",
-                  data: query,
-                });
-              }
-            } else {
-              response.json({
-                status: "Failed",
-                message: "You can't join any database you have only one table",
-              });
             }
+          } else {
+            response.json({
+              status: "Failed",
+              message: "No table given",
+            });
           }
         } else {
           response.json({
             status: "Failed",
-            message: "No table given",
+            message: `This tables doesn't exist: ${errorTables}Your tables are: ${tables}`,
           });
         }
-      } else {
-        response.json({
-          status: "Failed",
-          message: `This tables doesn't exist: ${errorTables}Your tables are: ${tables}`,
-        });
       }
-    }
+
+      console.log("Tasks are running");
+    });
   }
 
   async connectToCustomerDb({ request, response }: HttpContextContract) {
@@ -801,5 +814,12 @@ export default class ImportsController {
         message: "You given credintial is missing some values",
       });
     }
+  }
+
+  async TestScheduler({ request, response }: HttpContextContract) {
+    let task = cron.schedule("* * * * *", async () => {
+      console.log("running a task every minute");
+    });
+    response.json(task);
   }
 }
